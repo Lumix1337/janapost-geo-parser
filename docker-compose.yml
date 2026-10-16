@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  jana-address:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jana_address_service
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - JAVA_OPTS=-XX:+UseParallelGC -Xms256m -Xmx512m

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jana Address — Интеллектуальный разбор адресов JanaPost</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo-badge">JA</div>
+        <div>
+          <h1>Jana Address</h1>
+          <p class="subtitle">Система нормализации и разбора адресов доставки JanaPost</p>
+        </div>
+      </div>
+      <div class="header-actions" style="display: flex; align-items: center; gap: 12px;">
+        <a href="/swagger-ui.html" target="_blank" class="btn btn-secondary" style="text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;">
+          <span>📖 Swagger API</span>
+        </a>
+        <span class="badge badge-online">● Сервис активен (Автономно)</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Live Sandbox Card -->
+    <section class="card sandbox-card">
+      <div class="card-header">
+        <h2>⚡ Экспресс-разбор адреса</h2>
+        <span class="hint">Проверьте разбор произвольной строки</span>
+      </div>
+      <div class="sandbox-input-group">
+        <input type="text" id="sandbox-input" placeholder="Введите адрес: например, «город Алматы, Мкр Аксай 3а, 59, кв 70» или «Туран 55/6 магазин береке 4подьезд 9этаж»" value="город Алматы/Алматы қаласы, Мкр Аксай 3а, 59, кв 70">
+        <button id="btn-parse-single" class="btn btn-primary">Разобрать</button>
+      </div>
+      <div id="sandbox-result" class="sandbox-result-grid" style="display: none;">
+        <!-- Filled by JS -->
+      </div>
+    </section>
+
+    <!-- Batch Upload Section -->
+    <section class="card">
+      <div class="card-header flex-between">
+        <div>
+          <h2>📦 Пакетная обработка (Жюри / Оператор)</h2>
+          <span class="hint">Загрузите JSON файл с массивом адресов</span>
+        </div>
+        <div class="actions-group">
+          <button id="btn-sample" class="btn btn-secondary">Загрузить пример</button>
+          <button id="btn-export" class="btn btn-success" disabled>📥 Скачать результат (JSON)</button>
+        </div>
+      </div>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">📁</div>
+        <p class="drop-text">Перетащите <code>.json</code> файл сюда или <span>выберите на диске</span></p>
+        <p class="drop-subtext">Формат: [{ "id": "rec_001", "raw_address": "..." }]</p>
+        <input type="file" id="file-input" accept=".json" style="display: none;">
+      </div>
+
+      <!-- Stats Bar -->
+      <div id="stats-bar" class="stats-bar" style="display: none;">
+        <div class="stat-item">
+          <span class="stat-val" id="stat-total">0</span>
+          <span class="stat-lbl">Всего записей</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-success" id="stat-high">0</span>
+          <span class="stat-lbl">Высокая уверенность (≥85%)</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-warning" id="stat-review">0</span>
+          <span class="stat-lbl">Требуют внимания (&lt;85%)</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val" id="stat-time">0 мс</span>
+          <span class="stat-lbl">Время разбора</span>
+        </div>
+      </div>
+
+      <!-- Filters & Search & Pagination -->
+      <div id="table-controls" class="table-controls" style="display: none;">
+        <div class="filters">
+          <button class="filter-chip active" data-filter="all">Все</button>
+          <button class="filter-chip" data-filter="review">Требуют внимания (&lt;85%)</button>
+          <button class="filter-chip" data-filter="high">Уверенные (≥85%)</button>
+        </div>
+        <div class="pagination-group" style="display: flex; align-items: center; gap: 8px;">
+          <button id="btn-prev-page" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">←</button>
+          <span id="page-indicator" style="font-size: 13px; font-weight: 500;">Стр. 1 из 1</span>
+          <button id="btn-next-page" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">→</button>
+        </div>
+        <input type="text" id="search-table" class="search-input" placeholder="Поиск по таблице...">
+      </div>
+
+      <!-- Results Table -->
+      <div id="table-container" class="table-container" style="display: none;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Исходный адрес</th>
+              <th>Область</th>
+              <th>Город</th>
+              <th>Район</th>
+              <th>ЖК/Массив</th>
+              <th>Тип улицы</th>
+              <th>Улица</th>
+              <th>Дом</th>
+              <th>Кв</th>
+              <th>Подъезд</th>
+              <th>Этаж</th>
+              <th>Ориентир</th>
+              <th>Уверенность</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Rows generated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>JanaPost × Terricon Valley Hackathon | Jana Address Engine v1.0.0 (Java 21 / Spring Boot 3)</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
