@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -21,6 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.myapplication.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -67,38 +73,33 @@ fun showToast(context: Context, text: String) {
 
 @Composable
 fun JanaLogo(compact: Boolean, modifier: Modifier = Modifier) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "JAÑA",
-            color = JanaColors.Green,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = if (compact) 22.sp else 30.sp,
-            letterSpacing = 0.4.sp,
-        )
-        Text(
-            text = "POST",
-            color = JanaColors.Green,
-            fontWeight = FontWeight.Bold,
-            fontSize = if (compact) 10.sp else 13.sp,
-            letterSpacing = 2.sp,
-            modifier = Modifier.padding(top = 0.dp),
-        )
-    }
+    Image(
+        painter = painterResource(id = R.drawable.ic_jana_logo),
+        contentDescription = "JAŃA POST",
+        modifier = modifier
+            .height(if (compact) 32.dp else 48.dp)
+            .aspectRatio(77f / 40f),
+        contentScale = ContentScale.Fit
+    )
 }
 
 @Composable
 fun LogoBadge(modifier: Modifier = Modifier) {
     Box(
-        modifier
+        modifier = modifier
             .size(64.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(JanaColors.Green),
+            .background(Color.White)
+            .border(1.dp, JanaColors.Line, RoundedCornerShape(18.dp))
+            .padding(10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("JAÑA", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-            Text("POST", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.sp)
-        }
+        Image(
+            painter = painterResource(id = R.drawable.ic_jana_logo),
+            contentDescription = "JAŃA POST",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
