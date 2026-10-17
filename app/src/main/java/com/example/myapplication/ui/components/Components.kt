@@ -78,7 +78,7 @@ fun JanaLogo(compact: Boolean, modifier: Modifier = Modifier) {
         contentDescription = "JAŃA POST",
         modifier = modifier
             .height(if (compact) 32.dp else 48.dp)
-            .aspectRatio(77f / 40f),
+            .aspectRatio(1024f / 460f),
         contentScale = ContentScale.Fit
     )
 }
