@@ -15,12 +15,12 @@ public class KatoRepository {
     public record CityInfo(String name, String province, String defaultDistrict) {}
     public record StreetInfo(String district, String streetType) {}
 
-    private final List<String> provinces = new ArrayList<>();
-    private final Map<String, String> provinceAliases = new HashMap<>();
-    private final Map<String, CityInfo> cities = new HashMap<>();
-    private final List<Map.Entry<String, CityInfo>> sortedCitiesByLength = new ArrayList<>();
-    private final Map<String, List<String>> cityDistricts = new HashMap<>();
-    private final Map<String, Map<String, StreetInfo>> streetDistricts = new HashMap<>();
+    private List<String> provinces = List.of();
+    private Map<String, String> provinceAliases = Map.of();
+    private Map<String, CityInfo> cities = Map.of();
+    private List<Map.Entry<String, CityInfo>> sortedCitiesByLength = List.of();
+    private Map<String, List<String>> cityDistricts = Map.of();
+    private Map<String, Map<String, StreetInfo>> streetDistricts = Map.of();
 
     @PostConstruct
     public void init() {
@@ -30,11 +30,17 @@ public class KatoRepository {
             try (InputStream is = resource.getInputStream()) {
                 JsonNode root = mapper.readTree(is);
 
+                List<String> provList = new ArrayList<>();
+                Map<String, String> aliasMap = new HashMap<>();
+                Map<String, CityInfo> cityMap = new HashMap<>();
+                Map<String, List<String>> cDistMap = new HashMap<>();
+                Map<String, Map<String, StreetInfo>> sDistMap = new HashMap<>();
+
                 // Provinces
                 JsonNode provNode = root.get("provinces");
                 if (provNode != null && provNode.isArray()) {
                     for (JsonNode p : provNode) {
-                        provinces.add(p.asText());
+                        provList.add(p.asText());
                     }
                 }
 
@@ -42,7 +48,7 @@ public class KatoRepository {
                 JsonNode aliasNode = root.get("province_aliases");
                 if (aliasNode != null) {
                     aliasNode.fields().forEachRemaining(entry -> 
-                        provinceAliases.put(entry.getKey().toLowerCase(), entry.getValue().asText())
+                        aliasMap.put(entry.getKey().toLowerCase(), entry.getValue().asText())
                     );
                 }
 
@@ -54,7 +60,7 @@ public class KatoRepository {
                         JsonNode val = entry.getValue();
                         String province = val.has("province") && !val.get("province").isNull() ? val.get("province").asText() : null;
                         String district = val.has("district") && !val.get("district").isNull() ? val.get("district").asText() : null;
-                        cities.put(cityName.toLowerCase(), new CityInfo(cityName, province, district));
+                        cityMap.put(cityName.toLowerCase(), new CityInfo(cityName, province, district));
                     });
                 }
 
@@ -66,7 +72,7 @@ public class KatoRepository {
                         for (JsonNode d : entry.getValue()) {
                             dists.add(d.asText());
                         }
-                        cityDistricts.put(entry.getKey(), dists);
+                        cDistMap.put(entry.getKey(), Collections.unmodifiableList(dists));
                     });
                 }
 
@@ -83,13 +89,20 @@ public class KatoRepository {
                             String sType = val.has("type") && !val.get("type").isNull() ? val.get("type").asText() : null;
                             streetMap.put(streetName, new StreetInfo(dist, sType));
                         });
-                        streetDistricts.put(cityName, streetMap);
+                        sDistMap.put(cityName, Collections.unmodifiableMap(streetMap));
                     });
                 }
 
                 // Sort cities by length descending for instant early-exit matching
-                sortedCitiesByLength.addAll(cities.entrySet());
-                sortedCitiesByLength.sort((a, b) -> Integer.compare(b.getKey().length(), a.getKey().length()));
+                List<Map.Entry<String, CityInfo>> sorted = new ArrayList<>(cityMap.entrySet());
+                sorted.sort((a, b) -> Integer.compare(b.getKey().length(), a.getKey().length()));
+
+                this.provinces = Collections.unmodifiableList(provList);
+                this.provinceAliases = Collections.unmodifiableMap(aliasMap);
+                this.cities = Collections.unmodifiableMap(cityMap);
+                this.sortedCitiesByLength = Collections.unmodifiableList(sorted);
+                this.cityDistricts = Collections.unmodifiableMap(cDistMap);
+                this.streetDistricts = Collections.unmodifiableMap(sDistMap);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to load kazakhstan_geo.json", e);

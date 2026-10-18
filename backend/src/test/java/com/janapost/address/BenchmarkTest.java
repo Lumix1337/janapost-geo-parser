@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 class BenchmarkTest {
+
+    private static final Logger log = LoggerFactory.getLogger(BenchmarkTest.class);
 
     @Autowired
     private AddressParserService parser;
@@ -47,6 +52,7 @@ class BenchmarkTest {
         List<AddressOutput> results = parser.parseBatch(inputs);
         long elapsed = System.currentTimeMillis() - start;
 
+        log.info(">>> 1000 RECORDS PARSED IN: {} ms ({} seconds)", elapsed, (elapsed / 1000.0));
         System.out.println(">>> 1000 RECORDS PARSED IN: " + elapsed + " ms (" + (elapsed / 1000.0) + " seconds)");
 
         assertEquals(1000, results.size());

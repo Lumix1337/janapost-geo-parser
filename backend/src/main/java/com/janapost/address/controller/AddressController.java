@@ -22,6 +22,7 @@ import java.util.Map;
 @Tag(name = "Address Parser API", description = "Методы разбора, структурирования и проверки адресов РК")
 public class AddressController {
 
+    private static final int MAX_BATCH_SIZE = 50_000;
     private final AddressParserService parserService;
 
     public AddressController(AddressParserService parserService) {
@@ -40,13 +41,16 @@ public class AddressController {
         )
     })
     @PostMapping("/parse")
-    public ResponseEntity<AddressOutput> parseSingle(@RequestBody AddressInput input) {
+    public ResponseEntity<AddressOutput> parseSingle(@RequestBody(required = false) AddressInput input) {
+        if (input == null) {
+            return ResponseEntity.ok(AddressOutput.builder().confidence(0.0).build());
+        }
         return ResponseEntity.ok(parserService.parse(input));
     }
 
     @Operation(
         summary = "Пакетная обработка адресов (Batch Processing)",
-        description = "Высокопроизводительный параллельный разбор списка адресов (до 10 000+ записей). Поддерживает мультипоточность и автономную работу."
+        description = "Высокопроизводительный параллельный разбор списка адресов (до 50 000 записей). Поддерживает мультипоточность и автономную работу."
     )
     @ApiResponses({
         @ApiResponse(
@@ -56,7 +60,13 @@ public class AddressController {
         )
     })
     @PostMapping("/batch")
-    public ResponseEntity<List<AddressOutput>> parseBatch(@RequestBody List<AddressInput> inputs) {
+    public ResponseEntity<List<AddressOutput>> parseBatch(@RequestBody(required = false) List<AddressInput> inputs) {
+        if (inputs == null || inputs.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        if (inputs.size() > MAX_BATCH_SIZE) {
+            throw new IllegalArgumentException("Размер пакета (" + inputs.size() + ") превышает максимальный лимит в " + MAX_BATCH_SIZE + " записей.");
+        }
         return ResponseEntity.ok(parserService.parseBatch(inputs));
     }
 

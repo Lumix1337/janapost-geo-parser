@@ -1,6 +1,7 @@
 package com.example.myapplication.data
 
 import android.util.Log
+import java.util.regex.Pattern
 
 data class ParsedDeliveryAddress(
     val rawAddress: String,
@@ -21,61 +22,74 @@ object SmartAddressParser {
 
     private const val TAG = "SmartAddressParser"
 
-    // Pre-compiled static Regex constants (Zero GC overhead on mobile UI thread)
-    private val RE_ZERO_WIDTH = Regex("[\u200B-\u200D\uFEFF\u00AD]")
-    private val RE_BILINGUAL = Regex("(?i)([^,/]+)/([^,/]+(?:қаласы|каласы|облысы|ауданы))")
-    private val RE_SPACED_DOT = Regex("(?i)(ул|мкр|пр|просп|пер|д|кв)\\s*\\.\\s*")
-    private val RE_PODEZD = Regex("(?i)подьезд")
-    private val RE_DIGIT_WORD = Regex("(?i)(\\d+)(квартал|дом|мкр|микрорайон|подъезд|этаж|эт|кв|квартира)")
-    private val RE_WORD_DIGIT = Regex("(?i)(дом|подъезд|этаж|кв|квартира|flat|apt)(\\d+)")
-    private val RE_SPACES = Regex("\\s+")
+    // Pre-compiled static Regex constants with (?iu) for universal Android Unicode Cyrillic support
+    private val ZERO_WIDTH = Pattern.compile("[\u200B-\u200D\uFEFF\u200E\u200F\u00AD]")
+    private val MULTI_SPACE = Pattern.compile("[\\s\u00A0]+")
+    private val BILINGUAL_SLASH = Pattern.compile("(?iu)([^,/]+)/([^,/]+(?:қаласы|каласы|облысы|ауданы|көшесі|шағын ауданы))")
+    private val SPACED_DOT = Pattern.compile("(?iu)(?<=[\\s,;]|^)(ул|мкр|пр|просп|пер|д|кв)\\s*\\.\\s*")
+    private val PODEZD_TYPO = Pattern.compile("(?iu)(?<=[\\s,;]|^)подьезд(?=[\\s,;]|$)")
+    private val DIGIT_WORD = Pattern.compile("(?iu)(\\d+)(квартал|дом|мкр|микрорайон|подьезд|подъезд|этаж|эт|кв|квартира|вход|блок)")
+    private val WORD_DIGIT = Pattern.compile("(?iu)(дом|подьезд|подъезд|этаж|кв|квартира|flat|apt|под)(\\d+)")
 
-    private val RE_FL_PREFIX = Regex("(?i)(?:^|[,\\s])(?:этаж|эт|floor)\\s*[:#№]?\\s*(\\d+)")
-    private val RE_FL_SUFFIX = Regex("(?i)(?:^|[,\\s])(\\d+)\\s*(?:этаж|эт|floor)")
-    private val RE_ENT_PREFIX = Regex("(?i)(?:^|[,\\s])(?:подъезд|п-д|вход|entrance)\\s*[:#№]?\\s*(\\d+)")
-    private val RE_ENT_SUFFIX = Regex("(?i)(?:^|[,\\s])(\\d+)\\s*(?:подъезд|п-д|вход)")
-    private val RE_APT_PREFIX = Regex("(?i)(?:^|[,\\s])(?:квартира|кв|flat|apt|комната)\\s*[.\\-:#№]?\\s*(\\d+[а-яa-z]?)")
-    private val RE_APT_SUFFIX = Regex("(?i)(?:^|[,\\s])(\\d+)\\s*(?:квартира|кв|flat)")
-    private val RE_LANDMARK = Regex("(?i)(?:^|[,\\s])((?:магазин|qazpost|трц|тц|аптека|кафе|возле|рядом с|около)\\s+[^,;]+?)(?=[,;]|\\b(?:дом|кв|подъезд|этаж)\\b|$)")
-    private val RE_HOUSE_EXPLICIT = Regex("(?i)(?:^|[,\\s])(?:дом|д|house)\\s*[.\\-:#№]?\\s*(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)")
-    private val RE_HOUSE_NUM = Regex("^\\d+(?:[/\\\\]\\d+)?[а-яa-z]?$", RegexOption.IGNORE_CASE)
+    private val FLOOR_PREFIX = Pattern.compile("(?iu)(?:^|[,\\s])(?:этаж|эт|floor)\\s*[:#№]?\\s*(\\d+)(?=[,\\s]|$)")
+    private val FLOOR_SUFFIX = Pattern.compile("(?iu)(?:^|[,\\s])(\\d+)\\s*(?:этаж|эт|floor)(?=[,\\s]|$)")
+    private val ENTRANCE_PREFIX = Pattern.compile("(?iu)(?:^|[,\\s])(?:подъезд|подьезд|п-д|вход|entrance)\\s*[:#№]?\\s*(\\d+)(?=[,\\s]|$)")
+    private val ENTRANCE_SUFFIX = Pattern.compile("(?iu)(?:^|[,\\s])(\\d+)\\s*(?:подъезд|подьезд|п-д|вход|entrance)(?=[,\\s]|$)")
+    private val APT_PREFIX = Pattern.compile("(?iu)(?:^|[,\\s])(?:квартира|кв|flat|apt|комната|ком)\\s*[.\\-:#№]?\\s*(\\d+[а-яa-z]?)(?=[,\\s]|$)")
+    private val APT_SUFFIX = Pattern.compile("(?iu)(?:^|[,\\s])(\\d+)\\s*(?:квартира|кв|flat)(?=[,\\s]|$)")
+    private val LANDMARK_KEYWORD = Pattern.compile("(?iu)(?:^|[,\\s])((?:возле|рядом с|около|напротив|ориентир|ор-р|магазин|супермаркет|трц|тц|тд|бц|рынок|аптека|кафе|qazpost|казпочта|мечеть|парк)\\s+[\\p{L}0-9\\s\"'-]+?)(?=[,;]|(?<=[\\s,;]|^)(?:дом|д|кв|квартира|подъезд|подьезд|этаж|эт|floor|flat)(?=[\\s,;]|$)|\\d+\\s*(?:подъезд|подьезд|этаж|эт|дом|кв)|$)")
+    private val HOUSE_EXPLICIT = Pattern.compile("(?iu)(?:^|[,\\s])(?:дом|д|house)\\s*[.\\-:#№]?\\s*(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)(?=[,\\s]|$)")
 
-    private val RE_MKR_SEG = Regex("(?i)^(?:мкр|микрорайон|м-н)\\.?\\s*(.+)$")
-    private val RE_UL_SEG = Regex("(?i)^(?:улица|ул)\\.?\\s*(.+)$")
-    private val RE_PR_SEG = Regex("(?i)^(?:проспект|пр|просп)\\.?\\s*(.+)$")
+    private val DISTRICT_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])([\\p{L}]+(?:ский|ской|ский|ның| ауданы)?)\\s+(?:район|р-н|ауданы)(?=[,\\s]|$)")
+    private val DISTRICT_PREFIX_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])(?:район|р-н|ауданы)\\s+([\\p{L}]+)(?=[,\\s]|$)")
+    private val EDGE_CLEANUP = Pattern.compile("^[,\\s]+|[,\\s]+$")
 
-    private val RE_MKR_FULL = Regex("(?i)(?:^|\\s)(?:мкр|микрорайон|м-н)\\.?\\s+([^,]+?)(?:\\s+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
-    private val RE_UL_FULL = Regex("(?i)(?:^|\\s)(?:улица|ул)\\.?\\s+([^,]+?)(?:\\s+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
-    private val RE_PR_FULL = Regex("(?i)(?:^|\\s)(?:проспект|пр|просп)\\.?\\s+([^,]+?)(?:\\s+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
-    private val RE_GENERIC = Regex("(?i)^([^\\d,]+?)(?:\\s+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?))?$")
-    private val RE_NUM = Regex("(?i)(?:^|\\s)(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)(?=\\s|$)")
+    private val HOUSE_SEGMENT_PATTERN = Pattern.compile("^\\d+(?:[/\\\\]\\d+)?[а-яa-z]?$", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
+    private val MKR_SEG_PATTERN = Pattern.compile("(?iu)^(?:мкр|микрорайон|м-н|шағын ауданы)\\.?\\s*(.+)$")
+    private val UL_SEG_PATTERN = Pattern.compile("(?iu)^(?:улица|ул|көшесі)\\.?\\s*(.+)$")
+    private val PR_SEG_PATTERN = Pattern.compile("(?iu)^(?:проспект|пр|просп|даңғылы)\\.?\\s*(.+)$")
+    private val PER_SEG_PATTERN = Pattern.compile("(?iu)^(.+?)\\s+(?:переулок|пер)\\.?$")
+    private val KV_SEG_PATTERN = Pattern.compile("(?iu)^(.+?)\\s+(?:квартал|кв-л)\\.?$")
 
-    private val RE_CITY_ALMATY = Regex("(?i)(?:город|г|қ)?\\.?\\s*алматы(?:\\s*қаласы)?")
-    private val RE_CITY_ASTANA = Regex("(?i)(?:город|г|қ)?\\.?\\s*(?:астана|нур-султан|нұр-сұлтан)(?:\\s*қаласы)?")
-    private val RE_CITY_SHYMKENT = Regex("(?i)(?:город|г|қ)?\\.?\\s*шымкент(?:\\s*қаласы)?")
-    private val RE_CITY_AKTOBE = Regex("(?i)(?:город|г|қ)?\\.?\\s*(?:актобе|ақтөбе)(?:\\s*қаласы)?")
-    private val RE_CITY_KARAGANDA = Regex("(?i)(?:город|г|қ)?\\.?\\s*(?:караганда|қарағанды)(?:\\s*қаласы)?")
+    private val MKR_FULL_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])(?:мкр|микрорайон|м-н|шағын ауданы)\\.?\\s+([\\p{L}0-9\\s-]+?)(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
+    private val MKR_PRE_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])([\\p{L}0-9-]+)\\s+(?:мкр|микрорайон|м-н)(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|[,\\s]|$)")
+    private val UL_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])(?:улица|ул|көшесі)\\.?\\s*([\\p{L}0-9\\s-]+?)(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
+    private val PR_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])(?:проспект|пр|просп|даңғылы)\\.?\\s*([\\p{L}0-9\\s-]+?)(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
+    private val PER_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])([\\p{L}0-9\\s-]+?)\\s+(?:переулок|пер)\\.?(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
+    private val KV_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])([\\p{L}0-9-]+)\\s+(?:квартал|кв-л)\\.?(?=[,\\s]+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)|$)")
+    private val GENERIC_PATTERN = Pattern.compile("(?iu)^([\\p{L}\\s-]+?)(?:\\s+(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?))?$")
+    private val NUM_PATTERN = Pattern.compile("(?iu)(?:^|[,\\s])(\\d+(?:[/\\\\]\\d+)?[а-яa-z]?)(?=[,\\s]|$)")
+
+    private val RE_CITY_ALMATY = Pattern.compile("(?iu)(?:город|г|қ)?\\.?\\s*алматы(?:\\s*(?:қаласы|каласы))?")
+    private val RE_CITY_ASTANA = Pattern.compile("(?iu)(?:город|г|қ)?\\.?\\s*(?:астана|нур-султан|нұр-сұлтан)(?:\\s*(?:қаласы|каласы))?")
+    private val RE_CITY_SHYMKENT = Pattern.compile("(?iu)(?:город|г|қ)?\\.?\\s*шымкент(?:\\s*(?:қаласы|каласы))?")
+    private val RE_CITY_AKTOBE = Pattern.compile("(?iu)(?:город|г|қ)?\\.?\\s*(?:актобе|ақтөбе)(?:\\s*(?:қаласы|каласы))?")
+    private val RE_CITY_KARAGANDA = Pattern.compile("(?iu)(?:город|г|қ)?\\.?\\s*(?:караганда|қарағанды)(?:\\s*(?:қаласы|каласы))?")
 
     fun parse(raw: String): ParsedDeliveryAddress {
         if (raw.isBlank()) return ParsedDeliveryAddress(raw, confidence = 0.0)
 
         try {
             // 1. Clean invisible / zero-width characters
-            var s = raw.replace(RE_ZERO_WIDTH, "")
+            var s = ZERO_WIDTH.matcher(raw).replaceAll("")
+            s = MULTI_SPACE.matcher(s).replaceAll(" ").trim()
 
             // 2. Bilingual slashes
-            s = s.replace(RE_BILINGUAL, "$1")
+            val slashM = BILINGUAL_SLASH.matcher(s)
+            if (slashM.find()) {
+                s = slashM.replaceAll("$1")
+            }
 
             // 3. Fix spaced dots
-            s = s.replace(RE_SPACED_DOT, "$1. ")
+            s = SPACED_DOT.matcher(s).replaceAll("$1. ")
 
             // 4. Normalize typo in "подьезд" -> "подъезд"
-            s = s.replace(RE_PODEZD, "подъезд")
+            s = PODEZD_TYPO.matcher(s).replaceAll("подъезд")
 
             // 5. Separate attached digits and words
-            s = s.replace(RE_DIGIT_WORD, "$1 $2")
-            s = s.replace(RE_WORD_DIGIT, "$1 $2")
-            s = s.replace(RE_SPACES, " ").trim()
+            s = DIGIT_WORD.matcher(s).replaceAll("$1 $2")
+            s = WORD_DIGIT.matcher(s).replaceAll("$1 $2")
+            s = MULTI_SPACE.matcher(s).replaceAll(" ").trim()
 
             var current = s
             var floor: String? = null
@@ -85,149 +99,240 @@ object SmartAddressParser {
             var house: String? = null
 
             // 6. Floor
-            val flM = RE_FL_PREFIX.find(current) ?: RE_FL_SUFFIX.find(current)
-            if (flM != null) {
-                floor = flM.groupValues[1]
-                current = current.replace(flM.value, " ")
+            val flM = FLOOR_PREFIX.matcher(current)
+            if (flM.find()) {
+                floor = flM.group(1)?.trim()
+                current = current.substring(0, flM.start()) + " " + current.substring(flM.end())
+            } else {
+                val flsM = FLOOR_SUFFIX.matcher(current)
+                if (flsM.find()) {
+                    floor = flsM.group(1)?.trim()
+                    current = current.substring(0, flsM.start()) + " " + current.substring(flsM.end())
+                }
             }
 
             // 7. Entrance
-            val entM = RE_ENT_PREFIX.find(current) ?: RE_ENT_SUFFIX.find(current)
-            if (entM != null) {
-                entrance = entM.groupValues[1]
-                current = current.replace(entM.value, " ")
+            val entM = ENTRANCE_PREFIX.matcher(current)
+            if (entM.find()) {
+                entrance = entM.group(1)?.trim()
+                current = current.substring(0, entM.start()) + " " + current.substring(entM.end())
+            } else {
+                val entsM = ENTRANCE_SUFFIX.matcher(current)
+                if (entsM.find()) {
+                    entrance = entsM.group(1)?.trim()
+                    current = current.substring(0, entsM.start()) + " " + current.substring(entsM.end())
+                }
             }
 
             // 8. Apartment
-            val aptM = RE_APT_PREFIX.find(current) ?: RE_APT_SUFFIX.find(current)
-            if (aptM != null) {
-                apartment = aptM.groupValues[1]
-                current = current.replace(aptM.value, " ")
+            val aptM = APT_PREFIX.matcher(current)
+            if (aptM.find()) {
+                apartment = aptM.group(1)?.trim()
+                current = current.substring(0, aptM.start()) + " " + current.substring(aptM.end())
+            } else {
+                val aptsM = APT_SUFFIX.matcher(current)
+                if (aptsM.find()) {
+                    apartment = aptsM.group(1)?.trim()
+                    current = current.substring(0, aptsM.start()) + " " + current.substring(aptsM.end())
+                }
             }
 
             // 9. Landmark
-            val lmM = RE_LANDMARK.find(current)
-            if (lmM != null) {
-                landmark = lmM.groupValues[1].trim()
-                current = current.replace(lmM.value, " ")
+            val lmM = LANDMARK_KEYWORD.matcher(current)
+            if (lmM.find()) {
+                landmark = lmM.group(1)?.trim()
+                current = current.substring(0, lmM.start(1)) + " " + current.substring(lmM.end(1))
             }
 
             // 10. Explicit House
-            val hmM = RE_HOUSE_EXPLICIT.find(current)
-            if (hmM != null) {
-                house = hmM.groupValues[1]
-                current = current.replace(hmM.value, " ")
+            val hmM = HOUSE_EXPLICIT.matcher(current)
+            if (hmM.find()) {
+                house = hmM.group(1)?.trim()
+                current = current.substring(0, hmM.start()) + " " + current.substring(hmM.end())
             }
 
-            current = current.replace(RE_SPACES, " ").trim()
+            current = MULTI_SPACE.matcher(current).replaceAll(" ").trim()
 
-            // 11. City & Province detection
+            // 11. Explicit District in String
+            var district: String? = null
+            val distM = DISTRICT_PATTERN.matcher(current)
+            if (distM.find()) {
+                val rawDist = distM.group(1)?.trim().orEmpty()
+                if (rawDist.isNotEmpty()) {
+                    val cleanedDist = rawDist.replace(Regex("(?i)\\s*(?:район|р-н|ауданы)$"), "").trim()
+                    if (cleanedDist.isNotEmpty()) {
+                        district = cleanedDist.substring(0, 1).uppercase() + cleanedDist.substring(1).lowercase()
+                    }
+                    current = current.substring(0, distM.start()) + " " + current.substring(distM.end())
+                }
+            } else {
+                val distPreM = DISTRICT_PREFIX_PATTERN.matcher(current)
+                if (distPreM.find()) {
+                    val rawDist = distPreM.group(1)?.trim().orEmpty()
+                    if (rawDist.isNotEmpty()) {
+                        district = rawDist.substring(0, 1).uppercase() + rawDist.substring(1).lowercase()
+                        current = current.substring(0, distPreM.start()) + " " + current.substring(distPreM.end())
+                    }
+                }
+            }
+
+            // 12. City & Province detection
             var city: String? = null
             var province: String? = null
-            var district: String? = null
 
             val lower = current.lowercase()
             when {
                 lower.contains("алматы") -> {
                     city = "Алматы"
                     province = "Алматы"
-                    current = current.replace(RE_CITY_ALMATY, " ").trim()
+                    current = RE_CITY_ALMATY.matcher(current).replaceAll(" ")
                 }
                 lower.contains("астана") || lower.contains("нур-султан") || lower.contains("нұр-сұлтан") -> {
                     city = "Астана"
                     province = "Астана"
-                    current = current.replace(RE_CITY_ASTANA, " ").trim()
+                    current = RE_CITY_ASTANA.matcher(current).replaceAll(" ")
                 }
                 lower.contains("шымкент") -> {
                     city = "Шымкент"
                     province = "Шымкент"
-                    current = current.replace(RE_CITY_SHYMKENT, " ").trim()
+                    current = RE_CITY_SHYMKENT.matcher(current).replaceAll(" ")
                 }
                 lower.contains("актобе") || lower.contains("ақтөбе") -> {
                     city = "Актобе"
                     province = "Актюбинская область"
-                    current = current.replace(RE_CITY_AKTOBE, " ").trim()
+                    current = RE_CITY_AKTOBE.matcher(current).replaceAll(" ")
                 }
                 lower.contains("караганда") || lower.contains("қарағанды") -> {
                     city = "Караганда"
                     province = "Карагандинская область"
-                    current = current.replace(RE_CITY_KARAGANDA, " ").trim()
+                    current = RE_CITY_KARAGANDA.matcher(current).replaceAll(" ")
                 }
             }
+
+            // Clean edge separators after city removal
+            current = EDGE_CLEANUP.matcher(current).replaceAll("").trim()
 
             var streetType: String? = null
             var streetName: String? = null
 
-            // 12. Segment or pattern extraction for Street & Microdistrict
-            val cleanSegments = current.split(",").map { it.trim() }.filter { it.isNotBlank() }
-            if (cleanSegments.size >= 2) {
-                for (seg in cleanSegments) {
-                    if (house == null && RE_HOUSE_NUM.matches(seg)) {
+            // 13. Street & House Extraction
+            if (current.contains(",")) {
+                val segments = current.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                for (seg in segments) {
+                    if (house == null && HOUSE_SEGMENT_PATTERN.matcher(seg).matches()) {
                         house = seg
                         continue
                     }
-                    val mkrSeg = RE_MKR_SEG.find(seg)
-                    if (mkrSeg != null) {
+                    val mm = MKR_SEG_PATTERN.matcher(seg)
+                    if (mm.find()) {
                         streetType = "микрорайон"
-                        streetName = mkrSeg.groupValues[1].trim()
+                        streetName = mm.group(1)?.trim()
                         continue
                     }
-                    val ulSeg = RE_UL_SEG.find(seg)
-                    if (ulSeg != null) {
+                    val um = UL_SEG_PATTERN.matcher(seg)
+                    if (um.find()) {
                         streetType = "улица"
-                        streetName = ulSeg.groupValues[1].trim()
+                        streetName = um.group(1)?.trim()
                         continue
                     }
-                    val prSeg = RE_PR_SEG.find(seg)
-                    if (prSeg != null) {
+                    val pm = PR_SEG_PATTERN.matcher(seg)
+                    if (pm.find()) {
                         streetType = "проспект"
-                        streetName = prSeg.groupValues[1].trim()
+                        streetName = pm.group(1)?.trim()
+                        continue
+                    }
+                    val perM = PER_SEG_PATTERN.matcher(seg)
+                    if (perM.find()) {
+                        streetType = "переулок"
+                        streetName = perM.group(1)?.trim()
+                        continue
+                    }
+                    val kvM = KV_SEG_PATTERN.matcher(seg)
+                    if (kvM.find()) {
+                        streetType = "квартал"
+                        streetName = kvM.group(1)?.trim()
                         continue
                     }
                 }
             }
 
-            val sWithoutCommas = current.replace(",", " ").replace(RE_SPACES, " ").trim()
+            // Regex fallback if not resolved by commas
+            val sWithoutCommas = current.replace("[,;]+".toRegex(), " ")
+                .replace(MULTI_SPACE.toRegex(), " ")
+                .trim()
 
             if (streetName == null) {
-                val mkrM = RE_MKR_FULL.find(sWithoutCommas)
-                if (mkrM != null) {
+                val mm = MKR_FULL_PATTERN.matcher(sWithoutCommas)
+                if (mm.find()) {
                     streetType = "микрорайон"
-                    streetName = mkrM.groupValues[1].trim()
-                    if (house == null && mkrM.groupValues.size > 2 && mkrM.groupValues[2].isNotBlank()) {
-                        house = mkrM.groupValues[2].trim()
+                    streetName = mm.group(1)?.trim()
+                    if (house == null && mm.groupCount() >= 2 && mm.group(2) != null) {
+                        house = mm.group(2)?.trim()
                     }
                 }
             }
 
             if (streetName == null) {
-                val ulM = RE_UL_FULL.find(sWithoutCommas)
-                if (ulM != null) {
+                val preM = MKR_PRE_PATTERN.matcher(sWithoutCommas)
+                if (preM.find()) {
+                    streetType = "микрорайон"
+                    streetName = preM.group(1)?.trim()
+                    if (house == null && preM.group(2) != null) {
+                        house = preM.group(2)?.trim()
+                    }
+                }
+            }
+
+            if (streetName == null) {
+                val um = UL_PATTERN.matcher(sWithoutCommas)
+                if (um.find()) {
                     streetType = "улица"
-                    streetName = ulM.groupValues[1].trim()
-                    if (house == null && ulM.groupValues.size > 2 && ulM.groupValues[2].isNotBlank()) {
-                        house = ulM.groupValues[2].trim()
+                    streetName = um.group(1)?.trim()
+                    if (house == null && um.groupCount() >= 2 && um.group(2) != null) {
+                        house = um.group(2)?.trim()
                     }
                 }
             }
 
             if (streetName == null) {
-                val prM = RE_PR_FULL.find(sWithoutCommas)
-                if (prM != null) {
+                val pm = PR_PATTERN.matcher(sWithoutCommas)
+                if (pm.find()) {
                     streetType = "проспект"
-                    streetName = prM.groupValues[1].trim()
-                    if (house == null && prM.groupValues.size > 2 && prM.groupValues[2].isNotBlank()) {
-                        house = prM.groupValues[2].trim()
+                    streetName = pm.group(1)?.trim()
+                    if (house == null && pm.groupCount() >= 2 && pm.group(2) != null) {
+                        house = pm.group(2)?.trim()
                     }
                 }
             }
 
             if (streetName == null) {
-                val genM = RE_GENERIC.find(sWithoutCommas)
-                if (genM != null) {
-                    streetName = genM.groupValues[1].trim()
-                    if (house == null && genM.groupValues.size > 2 && genM.groupValues[2].isNotBlank()) {
-                        house = genM.groupValues[2].trim()
+                val perM = PER_PATTERN.matcher(sWithoutCommas)
+                if (perM.find()) {
+                    streetType = "переулок"
+                    streetName = perM.group(1)?.trim()
+                    if (house == null && perM.groupCount() >= 2 && perM.group(2) != null) {
+                        house = perM.group(2)?.trim()
+                    }
+                }
+            }
+
+            if (streetName == null) {
+                val kvM = KV_PATTERN.matcher(sWithoutCommas)
+                if (kvM.find()) {
+                    streetType = "квартал"
+                    streetName = kvM.group(1)?.trim()
+                    if (house == null && kvM.groupCount() >= 2 && kvM.group(2) != null) {
+                        house = kvM.group(2)?.trim()
+                    }
+                }
+            }
+
+            if (streetName == null) {
+                val genM = GENERIC_PATTERN.matcher(sWithoutCommas)
+                if (genM.find()) {
+                    streetName = genM.group(1)?.trim()
+                    if (house == null && genM.group(2) != null) {
+                        house = genM.group(2)?.trim()
                     }
                     if (streetName.equals("Туран", ignoreCase = true)) {
                         streetType = "проспект"
@@ -237,10 +342,10 @@ object SmartAddressParser {
             }
 
             if (house == null) {
-                val numM = RE_NUM.find(sWithoutCommas)
-                if (numM != null) {
-                    val candidate = numM.groupValues[1].trim()
-                    if (streetName == null || !streetName.contains(candidate)) {
+                val nm = NUM_PATTERN.matcher(sWithoutCommas)
+                while (nm.find()) {
+                    val candidate = nm.group(1)?.trim()
+                    if (candidate != null && (streetName == null || !streetName.contains(candidate))) {
                         house = candidate
                     }
                 }
@@ -262,8 +367,9 @@ object SmartAddressParser {
                 }
             }
 
+            // Preserve original case from rawAddress
             if (streetName != null) {
-                val idx = raw.indexOf(streetName, ignoreCase = true)
+                val idx = raw.lowercase().indexOf(streetName.lowercase())
                 if (idx >= 0 && idx + streetName.length <= raw.length) {
                     streetName = raw.substring(idx, idx + streetName.length)
                 }

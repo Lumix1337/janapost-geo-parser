@@ -58,6 +58,14 @@ import com.example.myapplication.ui.JanaViewModel
 import com.example.myapplication.ui.components.ChoiceSheet
 import com.example.myapplication.ui.components.PrimaryButton
 import com.example.myapplication.ui.i18n.Strings
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.ui.components.copyText
+import com.example.myapplication.ui.components.showToast
 import com.example.myapplication.ui.theme.JanaColors
 
 @Composable
@@ -213,90 +221,432 @@ private fun SettingsCard(rows: List<SettingsRow>) {
 
 @Composable
 fun AddressScreen(vm: JanaViewModel, strings: Strings, english: Boolean, onBack: () -> Unit) {
+    val context = LocalContext.current
     val warehouse = vm.warehouse
     val address = if (english) warehouse.addressEn else warehouse.addressRu
 
-    var rawInput by remember { mutableStateOf("город Алматы/Алматы қаласы, Мкр Аксай 3а, 59, кв 70") }
-    var parsedResult by remember { mutableStateOf<com.example.myapplication.data.ParsedDeliveryAddress?>(null) }
-    var addressSaved by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(0) }
+    var rawInput by remember { mutableStateOf("") }
+
+    val sampleAddresses = remember {
+        listOf(
+            "город Алматы/Алматы қаласы, Мкр Аксай 3а, 59, кв 70",
+            "г. Астана, пр. Туран 48, блок 2, кв 12, 5 этаж",
+            "Караганда 66квартал 12дом 45кв",
+            "Шымкент мкр Нурсат 12 рядом с ТРЦ Рахима Плаза"
+        )
+    }
 
     Page(strings.myAddress, strings.back, onBack) {
-        Labeled(strings.yourId, warehouse.userId)
-        Labeled(strings.phone, warehouse.phone)
-        Labeled(strings.showAddress, address)
-        Spacer(Modifier.height(4.dp))
-        Text(warehouse.addressLocal, color = JanaColors.Muted, fontSize = 14.sp)
+        // Tab switcher
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val tab0Selected = selectedTab == 0
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (tab0Selected) JanaColors.Green else Color.Transparent)
+                    .clickable { selectedTab = 0 }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "🇰🇿 Доставка в РК",
+                    color = if (tab0Selected) Color.White else JanaColors.Text,
+                    fontWeight = if (tab0Selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 13.sp
+                )
+            }
 
-        Spacer(Modifier.height(24.dp))
-        HorizontalDivider(color = JanaColors.Line)
-        Spacer(Modifier.height(18.dp))
-
-        Text("⚡ Умный адрес доставки (Jana Address)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(
-            "Вставьте адрес одной строкой в свободной форме:",
-            color = JanaColors.Muted,
-            fontSize = 13.sp,
-        )
-        Spacer(Modifier.height(8.dp))
-
-        Field("Адрес одной строкой", rawInput) { rawInput = it }
-        Spacer(Modifier.height(12.dp))
-
-        PrimaryButton("Разобрать адрес", enabled = rawInput.isNotBlank()) {
-            try {
-                parsedResult = com.example.myapplication.data.SmartAddressParser.parse(rawInput)
-                addressSaved = false
-            } catch (e: Throwable) {
-                android.util.Log.e("AddressScreen", "Parsing crash prevented", e)
+            val tab1Selected = selectedTab == 1
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (tab1Selected) JanaColors.Green else Color.Transparent)
+                    .clickable { selectedTab = 1 }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "🇨🇳 Склад в Китае",
+                    color = if (tab1Selected) Color.White else JanaColors.Text,
+                    fontWeight = if (tab1Selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 13.sp
+                )
             }
         }
 
-        parsedResult?.let { res ->
-            Spacer(Modifier.height(16.dp))
-            Column(
+        Spacer(Modifier.height(18.dp))
+
+        if (selectedTab == 0) {
+            // KZ DELIVERY ADDRESSES (SMART ADDRESS PARSER)
+            Text("⚡ Умный адрес доставки (Jana Address)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Введите адрес одной строкой в свободной форме. Система автоматически разберёт его и сохранит для курьера:",
+                color = JanaColors.Muted,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            // Quick sample chips
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                sampleAddresses.forEachIndexed { index, sample ->
+                    val label = when (index) {
+                        0 -> "Алматы (Аксай)"
+                        1 -> "Астана (Туран)"
+                        2 -> "Слитный (66кв)"
+                        else -> "Шымкент (Ориентир)"
+                    }
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(JanaColors.GreenSoft)
+                            .clickable { rawInput = sample }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(label, color = JanaColors.Green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Input field
+            Box(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.White)
-                    .padding(16.dp),
+                    .padding(14.dp)
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                if (rawInput.isEmpty()) {
+                    Text("Например: Алматы, Аксай 3а, 59, кв 70", color = JanaColors.Muted, fontSize = 14.sp)
+                }
+                BasicTextField(
+                    value = rawInput,
+                    onValueChange = { rawInput = it },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = JanaColors.Text),
+                    cursorBrush = SolidColor(JanaColors.Green),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            PrimaryButton("+ Разобрать и сохранить адрес", enabled = rawInput.isNotBlank()) {
+                val trimmed = rawInput.trim()
+                if (trimmed.isNotEmpty()) {
+                    vm.addDeliveryAddress(trimmed)
+                    rawInput = ""
+                    showToast(context, "Адрес успешно разобран и сохранён!")
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider(color = JanaColors.Line)
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Сохранённые адреса (${vm.savedAddresses.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (vm.savedAddresses.isEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Результат разбора", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(JanaColors.GreenSoft)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Outlined.LocationOn,
+                            contentDescription = null,
+                            tint = JanaColors.Muted,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("Нет сохранённых адресов", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            "Уверенность: ${(res.confidence * 100).toInt()}%",
-                            color = JanaColors.Green,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
+                            "Добавьте адрес доставки выше — он появится здесь с автоматическим разбором по КАТО.",
+                            color = JanaColors.Muted,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Labeled("Город / Область", "${res.city ?: "—"} (${res.province ?: "—"})")
-                res.district?.let { Labeled("Район города (из КАТО)", it) }
-                Labeled("Улица / Микрорайон", "${res.streetType ?: ""} ${res.streetName ?: "—"}")
-                Labeled("Дом / Квартира", "дом: ${res.house ?: "—"}, кв: ${res.apartment ?: "—"}")
-                if (res.entrance != null || res.floor != null) {
-                    Labeled("Подъезд / Этаж", "подъезд: ${res.entrance ?: "—"}, этаж: ${res.floor ?: "—"}")
-                }
-                res.landmark?.let { Labeled("Ориентир", it) }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    vm.savedAddresses.forEach { item ->
+                        val res = item.parsed
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White)
+                                .border(
+                                    width = if (item.isDefault) 1.5.dp else 0.5.dp,
+                                    color = if (item.isDefault) JanaColors.Green else JanaColors.Line,
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            // Header of Address Card: Default Badge & Delete button
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (item.isDefault) {
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(JanaColors.GreenSoft)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            "✓ Основной адрес",
+                                            color = JanaColors.Green,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(JanaColors.Background)
+                                            .clickable { vm.setDefaultDeliveryAddress(item.id) }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            "Сделать основным",
+                                            color = JanaColors.Muted,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
 
-                Spacer(Modifier.height(8.dp))
-                PrimaryButton(if (addressSaved) "✓ Адрес сохранен курьеру" else "Сохранить адрес для доставки") {
-                    addressSaved = true
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(JanaColors.GreenSoft)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            "${(res.confidence * 100).toInt()}%",
+                                            color = JanaColors.Green,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = { vm.removeDeliveryAddress(item.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            contentDescription = "Удалить адрес",
+                                            tint = JanaColors.Muted,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+
+                            // City & KATO District
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    res.city ?: res.province ?: "Казахстан",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                res.district?.let { katoDistrict ->
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFFE8F1FC))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            "$katoDistrict (КАТО)",
+                                            color = Color(0xFF1E6FD9),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            // Street & House
+                            val streetStr = buildString {
+                                if (!res.streetType.isNullOrBlank()) append("${res.streetType} ")
+                                append(res.streetName ?: "Улица не определена")
+                                if (!res.house.isNullOrBlank()) append(", дом ${res.house}")
+                            }
+                            Text(streetStr, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
+                            // Apartment, Entrance, Floor row
+                            val details = mutableListOf<String>()
+                            if (!res.apartment.isNullOrBlank()) details.add("кв. ${res.apartment}")
+                            if (!res.entrance.isNullOrBlank()) details.add("подъезд ${res.entrance}")
+                            if (!res.floor.isNullOrBlank()) details.add("этаж ${res.floor}")
+
+                            if (details.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    details.joinToString(" • "),
+                                    color = JanaColors.Text,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            // Landmark
+                            if (!res.landmark.isNullOrBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "📍 ${res.landmark}",
+                                    color = JanaColors.GreenDark,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider(color = JanaColors.Line)
+                            Spacer(Modifier.height(6.dp))
+
+                            // Raw Input preview
+                            Text(
+                                "Исходный текст: \"${item.rawAddress}\"",
+                                color = JanaColors.Muted,
+                                fontSize = 11.sp,
+                                maxLines = 2
+                            )
+                        }
+                    }
                 }
             }
+        } else {
+            // CHINA WAREHOUSE TAB
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFFFF9E6))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    "ℹ️ Скопируйте эти данные в мобильное приложение Taobao, 1688 или Pinduoduo. Обязательно укажите ваш код клиента в примечании или имени получателя.",
+                    color = Color(0xFF8A6A00),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            WarehouseRowWithCopy(
+                label = strings.yourId,
+                value = warehouse.userId,
+                context = context,
+                toast = strings.copied
+            )
+            WarehouseRowWithCopy(
+                label = strings.phone,
+                value = warehouse.phone,
+                context = context,
+                toast = strings.copied
+            )
+            WarehouseRowWithCopy(
+                label = strings.showAddress,
+                value = address,
+                context = context,
+                toast = strings.copied
+            )
+            WarehouseRowWithCopy(
+                label = "Оригинальный адрес (中文)",
+                value = warehouse.addressLocal,
+                context = context,
+                toast = strings.copied
+            )
         }
     }
+}
+
+@Composable
+private fun WarehouseRowWithCopy(
+    label: String,
+    value: String,
+    context: android.content.Context,
+    toast: String
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .padding(14.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = JanaColors.Muted, fontSize = 12.sp)
+            IconButton(
+                onClick = { copyText(context, label, value, toast) },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.ContentCopy,
+                    contentDescription = "Копировать",
+                    tint = JanaColors.Green,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(value, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    }
+    Spacer(Modifier.height(10.dp))
 }
 
 @Composable

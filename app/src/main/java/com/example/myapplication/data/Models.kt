@@ -117,3 +117,12 @@ fun parseRoutePhone(raw: String): UserSession {
     val national = raw.substringAfter("-")
     return UserSession("+$dialDigits", national)
 }
+
+data class SavedDeliveryAddress(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val rawAddress: String,
+    val parsed: ParsedDeliveryAddress,
+    val isDefault: Boolean = false,
+    val label: String = "Адрес доставки",
+    val createdAt: Long = System.currentTimeMillis()
+)

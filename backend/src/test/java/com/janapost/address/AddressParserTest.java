@@ -147,4 +147,22 @@ class AddressParserTest {
             assertTrue(res.confidence() >= 0.5, "Confidence should be at least 0.5 for " + res.raw_address());
         }
     }
+
+    @Test
+    @DisplayName("Generate sample_output.json from sample_input.json")
+    void testGenerateSampleOutput() throws Exception {
+        java.io.File inputFile = new java.io.File("../sample_input.json");
+        if (inputFile.exists()) {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<AddressInput> inputs = mapper.readValue(
+                inputFile,
+                mapper.getTypeFactory().constructCollectionType(java.util.List.class, AddressInput.class)
+            );
+            java.util.List<AddressOutput> outputs = parser.parseBatch(inputs);
+            java.io.File outputFile = new java.io.File("../sample_output.json");
+            mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, outputs);
+            assertTrue(outputFile.exists() && outputFile.length() > 0);
+            assertEquals(inputs.size(), outputs.size());
+        }
+    }
 }

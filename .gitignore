@@ -12,4 +12,5 @@ target/
 .externalNativeBuild/
 .kotlin/
 *.log
-
+backups/
+result.json

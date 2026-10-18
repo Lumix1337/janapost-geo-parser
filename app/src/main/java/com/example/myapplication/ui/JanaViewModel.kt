@@ -13,9 +13,13 @@ import com.example.myapplication.data.Direction
 import com.example.myapplication.data.MainTab
 import com.example.myapplication.data.Parcel
 import com.example.myapplication.data.SupabaseAccount
+import com.example.myapplication.data.ParsedDeliveryAddress
+import com.example.myapplication.data.SavedDeliveryAddress
+import com.example.myapplication.data.SmartAddressParser
 import com.example.myapplication.data.UserSession
 import com.example.myapplication.data.Warehouse
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class JanaViewModel(private val saved: SavedStateHandle) : ViewModel() {
     private val account = SupabaseAccount()
@@ -49,13 +53,71 @@ class JanaViewModel(private val saved: SavedStateHandle) : ViewModel() {
     var loadedParcels by mutableStateOf<List<Parcel>>(emptyList())
         private set
 
+    var savedAddresses by mutableStateOf<List<SavedDeliveryAddress>>(
+        listOf(
+            SavedDeliveryAddress(
+                id = "sample_default",
+                rawAddress = "город Алматы/Алматы қаласы, Мкр Аксай 3а, 59, кв 70",
+                parsed = ParsedDeliveryAddress(
+                    rawAddress = "город Алматы/Алматы қаласы, Мкр Аксай 3а, 59, кв 70",
+                    city = "Алматы",
+                    province = "Алматы",
+                    district = "Ауэзовский",
+                    streetType = "микрорайон",
+                    streetName = "Аксай 3а",
+                    house = "59",
+                    apartment = "70",
+                    confidence = 0.95
+                ),
+                isDefault = true,
+                label = "Основной адрес"
+            )
+        )
+    )
+        private set
+
     var ready by mutableStateOf(false)
         private set
 
+    fun addDeliveryAddress(raw: String, label: String = "Адрес доставки"): SavedDeliveryAddress {
+        val parsed = SmartAddressParser.parse(raw)
+        val isFirst = savedAddresses.isEmpty()
+        val newAddr = SavedDeliveryAddress(
+            rawAddress = raw,
+            parsed = parsed,
+            isDefault = isFirst,
+            label = label
+        )
+        savedAddresses = listOf(newAddr) + savedAddresses
+        return newAddr
+    }
+
+    fun removeDeliveryAddress(id: String) {
+        val updated = savedAddresses.filterNot { it.id == id }
+        if (updated.isNotEmpty() && updated.none { it.isDefault }) {
+            savedAddresses = updated.mapIndexed { idx, addr -> if (idx == 0) addr.copy(isDefault = true) else addr }
+        } else {
+            savedAddresses = updated
+        }
+    }
+
+    fun setDefaultDeliveryAddress(id: String) {
+        savedAddresses = savedAddresses.map { addr ->
+            addr.copy(isDefault = addr.id == id)
+        }
+    }
+
     init {
         viewModelScope.launch {
-            runCatching { account.restore() }.getOrNull()?.let(::applyAccount)
-            ready = true
+            try {
+                withTimeoutOrNull(2500L) {
+                    account.restore()
+                }?.let(::applyAccount)
+            } catch (e: Throwable) {
+                android.util.Log.e("JanaViewModel", "Account restore skipped or timed out", e)
+            } finally {
+                ready = true
+            }
         }
     }
 
